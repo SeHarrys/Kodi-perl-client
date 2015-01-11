@@ -1,19 +1,19 @@
 package Kodi;
 
-=head
-    Kodi client
-=cut
-
 use Mojo::UserAgent;
-use parent 'Kodi::Methods';
+use Mojo::IOLoop;
 use Data::Dumper;
+
+use parent 'Kodi::Methods';
+
 use feature qw(say);
 
 sub new {
     my $class = shift;
+    my $host  = shift;
 
     my $self = {
-       host => 'http://'.shift,
+       host => '',
        playerid => 0,
        method => '',
        json => '',
@@ -22,9 +22,50 @@ sub new {
        debug => 1
     };
 
-    $self->{url} = $self->{host}.'/jsonrpc';
+    $self = bless $self, $class;
 
-    return bless $self, $class;
+    unless ( $host ) {
+	$self->Search();
+    } else {
+	$self->Set($host);
+    }
+
+    return $self;
+}
+
+sub Set {
+    my $self = shift;
+    my $host = shift;
+
+    $self->{host} = $host;
+    $self->{url}  = "http://$host/jsonrpc";
+}
+
+sub Search {
+    my $self = shift;
+
+    my $delay = Mojo::IOLoop->delay(sub { });
+
+    for ( 1 .. 255 ) {
+	my $end = $delay->begin;
+	my $url = "192.168.1.$_:8080";
+
+	$self->{ua}->get('http://'.$url => sub {
+	    my ($ua, $tx) = @_;
+
+	    if ( $tx->res->code == 200 ) {
+		if ( $tx->res->dom->at('title') &&
+		     $tx->res->dom->at('title')->text =~ '[XBMC|Kodi]' ) {
+		    say "Kodi Found @ $url";
+		    $self->Set($url);
+		}
+	    }
+
+	    $end->();
+			 });
+    }
+
+    $delay->wait;
 }
 
 sub Send {
@@ -53,35 +94,33 @@ sub Send {
 
     return $ret->{result} eq 'OK';
 
-    if ( $set->{error} ) {
-	$self->{error} = $set->{error};
-    }
+    $self->{error} = $set->{error} if $set->{error};
 
 }
 
 sub GenMethods {
     my $self = shift;
 
-    my $xbmc = $self->{ua}->get($self->{url})->res->json;
+    my $kodi = $self->{ua}->get($self->{url})->res->json;
 
-    say $_ for keys $xbmc;
+    map { say qq{$_ $kodi->{$_} } } keys $kodi if $self->{debug};
 
-    say "Kodi Methods : ".scalar( keys $xbmc->{methods} )." available";
+    say "Kodi Methods : ".scalar( keys $kodi->{methods} )." available";
 
     my $PM = "package Kodi::Methods;\n";
 
-    for my $m (keys $xbmc->{methods}) {
+    for my $m (keys $kodi->{methods}) {
 	my $func = $m;
 	$func =~ s/\.//;
-	$PM .= "=doc \n $m : ".$xbmc->{methods}->{$m}->{description}."\n=cut\n";
+	$PM .= "=doc \n $m : ".$kodi->{methods}->{$m}->{description}."\n=cut\n";
 	$PM .= "sub $func {\n";
 	$PM .= 'my ($self,$params) = (shift,shift);'."\n";
 
-	for (0 .. length @{$xbmc->{methods}->{$m}->{params}} ) {
-	    for my $key (keys%{$xbmc->{methods}->{$m}->{params}[$_]}) {
-		if ( $key eq 'required' && $xbmc->{methods}->{$m}->{params}[$_]{$key} ) {
-		    $PM .=' unless ( $params->{'.$xbmc->{methods}->{$m}->{params}[$_]{name}.'} ) { ';
-		    $PM .=' print "['.$func.'] Need a argument : '.$xbmc->{methods}->{$m}->{params}[$_]{name}.'\n";'." }\n";
+	for (0 .. length @{$kodi->{methods}->{$m}->{params}} ) {
+	    for my $key (keys%{$kodi->{methods}->{$m}->{params}[$_]}) {
+		if ( $key eq 'required' && $kodi->{methods}->{$m}->{params}[$_]{$key} ) {
+		    $PM .=' unless ( $params->{'.$kodi->{methods}->{$m}->{params}[$_]{name}.'} ) { ';
+		    $PM .=' print "['.$func.'] Need a argument : '.$kodi->{methods}->{$m}->{params}[$_]{name}.'\n";'." }\n";
 		}
 	    }
 	}
@@ -91,9 +130,18 @@ sub GenMethods {
     }
     $PM .= "1;";
 
-    open FF,">Kodi/Methods.pm";
-    print FF $PM;
-    close FF;
+    open my $ff, '>' , 'Kodi/Methods.pm' or die "Error: $!";
+    print $ff $PM;
+    close $ff;
+}
+
+sub Update {
+    my $self = shift;
+
+    $self->AudioLibraryScan();
+    $self->VideoLibraryScan();
+
+    say "Update Library - Kodi @ ".$self->{host};
 }
 
 1;
