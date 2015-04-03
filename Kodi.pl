@@ -8,16 +8,22 @@
  ./Kodi.pl GUIShowNotification '{"title":"Oh yeah","message":"Doble yeahhhh"}'
 =cut
 
+use strict;
 use Kodi;
 use JSON qw(decode_json);
+use feature qw(say);
+
+#my $X = Kodi->new('192.168.1.108:8080');
+my $X = Kodi->new();
 
 exit unless $ARGV[0];
 
-my $X = Kodi->new('192.168.1.108:8080');
-#my $X = Kodi->new();
-
 if ( $ARGV[0] eq 'gen' ) {
     $X->GenMethods();
+    exit;
+} elsif ( $ARGV[0] eq 'get' ) {
+    my $M = $X->GetMethods();
+    map { say $_ } keys $M->{methods};
     exit;
 }
 

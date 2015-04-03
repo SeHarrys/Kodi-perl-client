@@ -1,5 +1,6 @@
 package Kodi;
 
+use strict;
 use Mojo::UserAgent;
 use Mojo::IOLoop;
 use Data::Dumper;
@@ -41,28 +42,53 @@ sub Set {
     $self->{url}  = "http://$host/jsonrpc";
 }
 
+sub iphex {
+    my $s = shift;
+    my $c = 6;
+    my @ip;
+    map { push @ip, hex substr($s,$c,2); $c -= 2 } 0 .. 2;
+    return join '.',@ip;
+}
+
+
 sub Search {
     my $self = shift;
-
     my $delay = Mojo::IOLoop->delay(sub { });
 
-    for ( 1 .. 255 ) {
-	my $end = $delay->begin;
-	my $url = "192.168.1.$_:8080";
+    local $/;
+    open( my $fh, '<', '/proc/net/tcp' );
+    my $t = <$fh>;
+    close($fh);
+    my @a = split "\n",$t;
+    my $IPs;
 
-	$self->{ua}->get('http://'.$url => sub {
-	    my ($ua, $tx) = @_;
+    for ( 1 .. scalar(@a) ) {
+	my @l = split " ",$a[$_];
+	my ($ip,$port) = split ':',$l[1];
+	$IPs->{$ip} = iphex($ip);
+    }
 
-	    if ( $tx->res->code == 200 ) {
-		if ( $tx->res->dom->at('title') &&
-		     $tx->res->dom->at('title')->text =~ '[XBMC|Kodi]' ) {
-		    say "Kodi Found @ $url";
-		    $self->Set($url);
+    for ( keys $IPs ) {
+	next if $IPs->{$_} =~ /^(0|127)/;
+	my $IP = $IPs->{$_};
+	for ( 1 .. 255 ) {
+	    my $end = $delay->begin;
+	    my $url = qq{$IP.$_:8080};
+
+	    $self->{ua}->get('http://'.$url => sub {
+		my ($ua, $tx) = @_;
+
+		if ( $tx->res->code == 200 ) {
+		    if ( $tx->res->dom->at('title') &&
+			 $tx->res->dom->at('title')->text =~ '[XBMC|Kodi]' ) {
+			say "Kodi Found @ $url";
+			$self->Set($url);
+		    }
 		}
-	    }
 
-	    $end->();
-			 });
+		$end->();
+			     });
+	}
     }
 
     $delay->wait;
@@ -94,14 +120,20 @@ sub Send {
 
     return $ret->{result} eq 'OK';
 
-    $self->{error} = $set->{error} if $set->{error};
+    $self->{error} = $ret->{error} if $ret->{error};
 
+}
+
+sub GetMethods {
+    my $self = shift;
+
+    return $self->{ua}->get($self->{url})->res->json;
 }
 
 sub GenMethods {
     my $self = shift;
 
-    my $kodi = $self->{ua}->get($self->{url})->res->json;
+    my $kodi = $self->GetMethods();
 
     map { say qq{$_ $kodi->{$_} } } keys $kodi if $self->{debug};
 
