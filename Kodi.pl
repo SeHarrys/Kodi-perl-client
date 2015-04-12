@@ -13,18 +13,18 @@ use Kodi;
 use JSON qw(decode_json);
 use feature qw(say);
 
-#my $X = Kodi->new('192.168.1.108:8080');
-my $X = Kodi->new();
+my $X = Kodi->new('config.json');
+#my $X = Kodi->new();
 
 exit unless $ARGV[0];
 
-if ( $ARGV[0] eq 'gen' ) {
-    $X->GenMethods();
-    exit;
+if ( $ARGV[0] eq 'gen' ) { $X->GenMethods(); exit;
 } elsif ( $ARGV[0] eq 'get' ) {
     my $M = $X->GetMethods();
     map { say $_ } keys $M->{methods};
     exit;
+} elsif ( $ARGV[0] eq 'log' ) {
+    $X->{ssh}->system("/usr/bin/tail -f ~/.kodi/temp/kodi.log"); exit;
 }
 
 my $nam = $ARGV[0];

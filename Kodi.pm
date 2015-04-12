@@ -1,8 +1,11 @@
 package Kodi;
 
 use strict;
+use Cwd;
+use Config::JSON;
 use Mojo::UserAgent;
 use Mojo::IOLoop;
+use Net::OpenSSH;
 use Data::Dumper;
 
 use parent 'Kodi::Methods';
@@ -11,24 +14,38 @@ use feature qw(say);
 
 sub new {
     my $class = shift;
-    my $host  = shift;
+    my $config = shift;
 
     my $self = {
        host => '',
        playerid => 0,
        method => '',
        json => '',
-       ua => Mojo::UserAgent->new(),
+       ua   => Mojo::UserAgent->new(),
        error => '',
        debug => 1
     };
 
     $self = bless $self, $class;
 
-    unless ( $host ) {
+    unless ( $config ) {
 	$self->Search();
     } else {
-	$self->Set($host);
+	my $conf = Config::JSON->new($config);
+	$self->{conf} = $conf->{config};
+	$self->Set($self->{conf}->{host}.':'.$self->{conf}->{port});
+    }
+
+    if ( $self->{conf}->{ssh} ) {
+	$self->{conf}->{ssh}->{port} = 22 unless
+	    $self->{conf}->{ssh}->{port};
+
+	$self->{ssh} = Net::OpenSSH->new(
+	    $self->{conf}->{ssh}->{user}.':'.
+	    $self->{conf}->{ssh}->{passwd}.'@'.
+	    $self->{conf}->{ip}.':'.$self->{conf}->{ssh}->{port});
+    } else {
+	$self->{ssh} = sub { say "No SSH config"; exit };
     }
 
     return $self;
@@ -82,6 +99,7 @@ sub Search {
 		    if ( $tx->res->dom->at('title') &&
 			 $tx->res->dom->at('title')->text =~ '[XBMC|Kodi]' ) {
 			say "Kodi Found @ $url";
+			$self->{ip} = $IP;
 			$self->Set($url);
 		    }
 		}
