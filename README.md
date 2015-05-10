@@ -1,5 +1,5 @@
-=Kodi client
-------------
+Kodi client
+-----------
 
 Generate Methods from Kodi
 
