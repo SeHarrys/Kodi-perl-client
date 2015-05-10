@@ -18,13 +18,19 @@ my $X = Kodi->new('config.json');
 
 exit unless $ARGV[0];
 
-if ( $ARGV[0] eq 'gen' ) { $X->GenMethods(); exit;
+if ( $ARGV[0] eq 'gen' ) { 
+    $X->GenMethods(); 
+    exit;
 } elsif ( $ARGV[0] eq 'get' ) {
     my $M = $X->GetMethods();
-    map { say $_ } keys $M->{methods};
+    map { say $_ } keys %{ $M->{methods} };
+    exit;
+} elsif ( $ARGV[0] eq 'look' ) {
+    $X->SearchMethods($ARGV[1]);
     exit;
 } elsif ( $ARGV[0] eq 'log' ) {
-    $X->{ssh}->system("/usr/bin/tail -f ~/.kodi/temp/kodi.log"); exit;
+    $X->{ssh}->system("/usr/bin/tail -f ~/.kodi/temp/kodi.log"); 
+    exit;
 }
 
 my $nam = $ARGV[0];

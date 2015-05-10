@@ -32,8 +32,9 @@ sub new {
 	$self->Search();
     } else {
 	my $conf = Config::JSON->new($config);
+
 	$self->{conf} = $conf->{config};
-	$self->Set($self->{conf}->{host}.':'.$self->{conf}->{port});
+	$self->Set($self->{conf}->{ip}.':'.$self->{conf}->{port});
     }
 
     if ( $self->{conf}->{ssh} ) {
@@ -63,7 +64,9 @@ sub iphex {
     my $s = shift;
     my $c = 6;
     my @ip;
+    
     map { push @ip, hex substr($s,$c,2); $c -= 2 } 0 .. 2;
+    
     return join '.',@ip;
 }
 
@@ -85,7 +88,7 @@ sub Search {
 	$IPs->{$ip} = iphex($ip);
     }
 
-    for ( keys $IPs ) {
+    for ( keys %{$IPs} ) {
 	next if $IPs->{$_} =~ /^(0|127)/;
 	my $IP = $IPs->{$_};
 	for ( 1 .. 255 ) {
@@ -98,9 +101,11 @@ sub Search {
 		if ( $tx->res->code == 200 ) {
 		    if ( $tx->res->dom->at('title') &&
 			 $tx->res->dom->at('title')->text =~ '[XBMC|Kodi]' ) {
-			say "Kodi Found @ $url";
+
 			$self->{ip} = $IP;
 			$self->Set($url);
+			
+			say "Kodi Found @ $url";			
 		    }
 		}
 
@@ -148,18 +153,34 @@ sub GetMethods {
     return $self->{ua}->get($self->{url})->res->json;
 }
 
+sub SearchMethods {
+    my $self = shift;
+    my $search = shift;
+    
+    my $kodi = $self->GetMethods();
+    
+    say "Looking for: $search";
+    
+    for my $K ( keys %{ $kodi->{methods} } ) {
+	if ( $K =~ /$search/i ) {
+	    say "Found : $K\t".$kodi->{methods}->{$K}->{description};
+	}
+    }
+    
+}
+
 sub GenMethods {
     my $self = shift;
 
     my $kodi = $self->GetMethods();
 
-    map { say qq{$_ $kodi->{$_} } } keys $kodi if $self->{debug};
+    map { say qq{$_ $kodi->{$_} } } keys %{ $kodi } if $self->{debug};
 
-    say "Kodi Methods : ".scalar( keys $kodi->{methods} )." available";
+    say "Kodi Methods : ".scalar( keys %{ $kodi->{methods} } )." available";
 
     my $PM = "package Kodi::Methods;\n";
 
-    for my $m (keys $kodi->{methods}) {
+    for my $m ( keys %{ $kodi->{methods} } ) {
 	my $func = $m;
 	$func =~ s/\.//;
 	$PM .= "=doc \n $m : ".$kodi->{methods}->{$m}->{description}."\n=cut\n";
@@ -192,6 +213,19 @@ sub Update {
     $self->VideoLibraryScan();
 
     say "Update Library - Kodi @ ".$self->{host};
+}
+
+sub Pulsar {
+    my $self = shift;
+
+    my $pid = $self->{ssh}->capture("/usr/bin/pgrep pulsar");
+
+    unless($pid) {
+	say "Pulsar is not running";
+    } else {
+	say "Pulsar is running PID: $pid";
+    }
+    
 }
 
 1;

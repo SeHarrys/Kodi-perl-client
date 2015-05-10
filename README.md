@@ -1,9 +1,15 @@
-Kodi client
+=Kodi client
+------------
 
 Generate Methods from Kodi
+
+```shell
 ./Kodi.pl gen
+```
 
 Call method and json parameters
-./Kodi.pl ApplicationSetVolume '{"volume":10}'
 
+```shell
+./Kodi.pl ApplicationSetVolume '{"volume":10}'
+```
 
