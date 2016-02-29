@@ -1,8 +1,11 @@
 {
- "ip":"192.168.1.108",
- "port":"8080",
- "ssh":{
-     "user":"tv",
-     "passwd":"koditv22"
- }
+    "ip":"192.168.0.5",
+    "port":"80",
+    "ssh":{
+	"user":"root",
+	"passwd":"openelec"
+    },
+    "lirc":"madeforweb",
+    "Pkgs": ["https://github.com/scakemyer/plugin.video.quasar/releases/download/v0.9.23/plugin.video.quasar-0.9.23.zip","http://descargas.tvalacarta.info/pelisalacarta-kodi-isengard-4.0.7.zip","http://blog.tvalacarta.info/descargas/tvalacarta-kodi-isengard-4.0.0.zip"],
+    "GitHubPkg": ["scakemyer/plugin.video.quasar"]
 }

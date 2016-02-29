@@ -9,13 +9,12 @@ use Net::OpenSSH;
 use Data::Dumper;
 
 use parent 'Kodi::Methods';
-
 use feature qw(say);
 
 sub new {
-    my $class = shift;
-    my $config = shift;
-
+    my $class  = shift;
+    my $config = %ENV{'KODI'} // 'config.json';
+    
     my $self = {
        host => '',
        playerid => 0,
@@ -28,7 +27,7 @@ sub new {
 
     $self = bless $self, $class;
 
-    unless ( $config ) {
+    unless ( -e $config ) {
 	$self->Search();
     } else {
 	my $conf = Config::JSON->new($config);
@@ -70,7 +69,6 @@ sub iphex {
     return join '.',@ip;
 }
 
-
 sub Search {
     my $self = shift;
     my $delay = Mojo::IOLoop->delay(sub { });
@@ -93,14 +91,14 @@ sub Search {
 	my $IP = $IPs->{$_};
 	for ( 1 .. 255 ) {
 	    my $end = $delay->begin;
-	    my $url = qq{$IP.$_:8080};
+	    my $url = qq{$IP.$_:9090}; # 8080
 
 	    $self->{ua}->get('http://'.$url => sub {
 		my ($ua, $tx) = @_;
 
 		if ( $tx->res->code == 200 ) {
 		    if ( $tx->res->dom->at('title') &&
-			 $tx->res->dom->at('title')->text =~ '[XBMC|Kodi]' ) {
+			 $tx->res->dom->at('title')->text =~ '[XBMC|Kodi|Arch]' ) {
 
 			$self->{ip} = $IP;
 			$self->Set($url);
@@ -144,7 +142,6 @@ sub Send {
     return $ret->{result} eq 'OK';
 
     $self->{error} = $ret->{error} if $ret->{error};
-
 }
 
 sub GetMethods {
@@ -165,8 +162,7 @@ sub SearchMethods {
 	if ( $K =~ /$search/i ) {
 	    say "Found : $K\t".$kodi->{methods}->{$K}->{description};
 	}
-    }
-    
+    }    
 }
 
 sub GenMethods {
@@ -185,7 +181,7 @@ sub GenMethods {
 	$func =~ s/\.//;
 	$PM .= "=doc \n $m : ".$kodi->{methods}->{$m}->{description}."\n=cut\n";
 	$PM .= "sub $func {\n";
-	$PM .= 'my ($self,$params) = (shift,shift);'."\n";
+	$PM .= ' my ($self,$params) = (shift,shift);'."\n";
 
 	for (0 .. length @{$kodi->{methods}->{$m}->{params}} ) {
 	    for my $key (keys%{$kodi->{methods}->{$m}->{params}[$_]}) {
@@ -196,8 +192,8 @@ sub GenMethods {
 	    }
 	}
 
-	$PM .= '$self->{params} = $params;'."\n";
-	$PM .= '$self->Send("'.$m.'");'."\n}\n";
+	$PM .= ' $self->{params} = $params;'."\n";
+	$PM .= ' $self->Send("'.$m.'");'."\n}\n";
     }
     $PM .= "1;";
 
@@ -215,17 +211,78 @@ sub Update {
     say "Update Library - Kodi @ ".$self->{host};
 }
 
-sub Pulsar {
+sub IsRun {
     my $self = shift;
-
-    my $pid = $self->{ssh}->capture("/usr/bin/pgrep pulsar");
+    my $name = shift;
+    
+    my $pid = $self->{ssh}->capture("pgrep $name");
 
     unless($pid) {
-	say "Pulsar is not running";
+	say "$name is not running";
     } else {
-	say "Pulsar is running PID: $pid";
+	print "$name is running PID: $pid";
+    }    
+}
+
+sub Lirc {
+    my $self = shift;
+
+    $self->{ssh}->scp_put("lirc/madeforweb", "/storage/.config/lircd.conf") or die "error: " . $self->{ssh}->error;
+    $self->{ssh}->scp_put("lirc/Lircmap.xml", "/storage/.kodi/userdata/Lircmap.xml") or die"error: ". $self->{ssh}->error;
+    $self->{ssh}->scp_put("lirc/autostart.sh", "/storage/.config/autostart.sh") or die"error: ". $self->{ssh}->error;
+    $self->{ssh}->system("chmod +x /storage/.config/autostart.sh");
+}
+
+sub GitHubPkg {
+    my $self = shift;
+
+    for my $mod ( @{$self->{conf}->{Pkgs}} ) {
+	#my $zip = $self->{ua}->get("https://github.com/$mod/releases")->res->dom->at('ul.release-downloads li a')->{href};
     }
+}
+
+=doc
+    Descarga los plugins, si existe se omite por defecto
+=cut
+sub Pkgs {
+    my $self = shift;
+
+    for my $mod ( @{$self->{conf}->{Pkgs}} ) {
+	$self->{ssh}->system("wget $mod");
+    }
+}
+
+=doc
+    Genera alias volumen & play
+=cut
+sub Alias {
+    my $home = $ENV{HOME}."/.bashrc";
+    my $cwd  = cwd()."/Kodi.pl";
     
+    return unless -e $home;
+    
+    my $bash = << "EOF";
+## __KODI__
+alias Volumen="$cwd volume \$1"
+alias Pausa="$cwd play"
+alias KodiExec="$cwd \$1"
+## __KODI__
+EOF
+    my $cont = 0;
+    
+    open FF,$home;
+    open FW,'>',"/tmp/kodi-bashrc";
+    while(<FF>) {
+	$cont++ if $_ =~ /__KODI__/;
+	print FW $_ if $cont == 0 || $cont > 2;
+    }
+    print FW $bash;
+
+    close FF;
+    close FW;
+
+    rename "/tmp/kodi-bashrc",$home;
+    say "Alias Generado";
 }
 
 1;
